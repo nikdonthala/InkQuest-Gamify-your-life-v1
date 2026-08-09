@@ -97,7 +97,7 @@ const SHAPE_LABEL: Record<ShapeKind, string> = { rect: 'Rectangle', ellipse: 'El
 const clampZoom = (z: number) => Math.min(3, Math.max(0.35, z));
 
 export default function NotebookView() {
-  const { state, act, currentNotebook, levelInfo, overallStreak, comboMult, todayDone, dueToday, undoHistory, lastSaved } = useApp();
+  const { state, act, currentNotebook, levelInfo, overallStreak, comboMult, todayDone, dueToday, undoHistory, lastSaved, saveNow } = useApp();
   const dark = state.ui.dark;
   const companionOn = state.ui.companionOn;
 
@@ -120,6 +120,19 @@ export default function NotebookView() {
   const [rename, setRename] = useState(false);
   const [nameVal, setNameVal] = useState(currentNotebook?.name ?? '');
   const [tourOpen, setTourOpen] = useState(false);
+  const [saveFlash, setSaveFlash] = useState(false);
+  const saveTimerRef = useRef<number | null>(null);
+  const handleSave = () => {
+    void saveNow().then(() => {
+      setSaveFlash(true);
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => setSaveFlash(false), 1800);
+    });
+  };
+  // clear the flash timer if the notebook unmounts (back to the shelf)
+  useEffect(() => () => {
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+  }, []);
 
   // ---- live XP burst: whenever XP rises, float a +N XP near the top bar ----
   const prevXp = useRef(state.snap.meta.xp);
@@ -375,6 +388,15 @@ export default function NotebookView() {
               <>saving…</>
             )}
           </span>
+          <button
+            onClick={handleSave}
+            className={`ml-0.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition active:scale-95 ${
+              saveFlash ? 'bg-accent-green/25 text-accent-green' : 'bg-paper/10 text-paper/80 hover:bg-paper/20 hover:text-paper'
+            }`}
+            title="Save now — your notebook is also autosaved to this device"
+          >
+            {saveFlash ? '✓ Saved' : '💾 Save'}
+          </button>
         </div>
 
         <div className="ml-auto flex items-center gap-1">

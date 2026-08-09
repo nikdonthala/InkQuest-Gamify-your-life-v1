@@ -777,8 +777,8 @@ interface AppApi {
   comboMult: number;
   bestStreak: number;
   todayDone: number;
-  dueToday: number;
-  act: {
+  dueToday: number;    saveNow: () => Promise<void>;
+    act: {
     openNotebook: (id: string | null) => void;
     setDark: (d: boolean) => void;
     setCompanion: (on: boolean) => void;
@@ -983,6 +983,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [state.snap, state.loaded]);
 
+  // "Save now" — cancel any pending debounce and write the current snapshot immediately
+  const saveNow = useCallback(async () => {
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    try {
+      await saveSnapshot(stateRef.current.snap);
+    } catch {
+      /* ignore persistence errors (private mode etc.) */
+    }
+    setLastSaved(Date.now());
+  }, []);
+
+  // flush a save the moment the tab is hidden / page is being left — so a fast
+  // reload or a mobile background never loses the last tick of work
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') void saveNow();
+    };
+    // pagehide fires on reload/close and visibility may still be 'visible' there,
+    // so it must save unconditionally (beforeunload also covers desktop reloads)
+    const onPageHide = () => {
+      void saveNow();
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHidden);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [saveNow]);
+
   useEffect(() => {
     const onUnload = () => {
       void saveSnapshot(stateRef.current.snap);
@@ -1066,12 +1099,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       spend: (cost: number, itemId: string) => dispatch({ type: 'SPEND', cost, itemId }),
       popLevel: () => dispatch({ type: 'POP_LEVEL' }),
       reset: () => dispatch({ type: 'RESET' }),
+      saveNow,
       deleteNotebook: (id: string) => dispatch({ type: 'DELETE_NOTEBOOK', id }),
       renameNotebook: (id: string, name: string) => dispatch({ type: 'RENAME_NOTEBOOK', id, name }),
       setCover: (id: string, cover: string) => dispatch({ type: 'SET_COVER', id, cover })
       };
     },
-    [trackedDispatch]
+    [trackedDispatch, saveNow]
   );
 
   const api: AppApi = {
@@ -1082,7 +1116,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ...derived,
     act,
     undoHistory: { canUndo: pastRef.current.length > 0, canRedo: futureRef.current.length > 0, undo, redo },
-    lastSaved
+    lastSaved,
+    saveNow
   };
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;

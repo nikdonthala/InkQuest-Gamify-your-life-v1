@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas, Ellipse, Line, Path, PencilBrush, Point, Rect, Textbox } from 'fabric';
 import type { Page } from '../../types';
 import { PAGE_H, PAGE_W } from '../../types';
@@ -105,6 +105,9 @@ export default function CanvasPage({
   const fabricRef = useRef<Canvas | null>(null);
   const { act } = useApp();
 
+  // floating action bar (✏️ edit / ✕ delete) for the canvas object selected with the select tool
+  const [activeBar, setActiveBar] = useState<{ left: number; top: number; canEdit: boolean } | null>(null);
+
   const suppress = useRef(false);
   const pageIdRef = useRef(page.id);
   // last drawing JSON this canvas already holds — used to avoid reloading on our own saves
@@ -136,6 +139,23 @@ export default function CanvasPage({
       /* ignore */
     }
   }, [act]);
+
+  // action bar handlers (declared after saveState)
+  const editActive = useCallback(() => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getActiveObject();
+    if (obj && (obj.type === 'i-text' || obj.type === 'textbox')) (obj as Textbox).enterEditing?.();
+  }, []);
+  const deleteActive = useCallback(() => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getActiveObject();
+    if (!canvas || !obj) return;
+    canvas.remove(obj);
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+    setActiveBar(null);
+    saveState();
+  }, [saveState]);
 
   // init / dispose per page
   useEffect(() => {
@@ -207,9 +227,23 @@ export default function CanvasPage({
       }
     });
 
-    // text / sticky tools
+    // text / sticky tools — clicking an EXISTING text box with the text tool edits it,
+    // instead of silently dropping a new empty box on top of it
     canvas.on('mouse:down', (opt) => {
       const t = toolRef.current;
+      if (t === 'text' && opt.e) {
+        const p = canvas.getPointer(opt.e);
+        const hit = canvas
+          .getObjects()
+          .filter((o) => o.type === 'i-text' || o.type === 'textbox')
+          .find((o) => o.containsPoint(p));
+        if (hit) {
+          canvas.setActiveObject(hit);
+          canvas.requestRenderAll();
+          (hit as Textbox).enterEditing?.();
+          return;
+        }
+      }
       if ((t === 'text' || t === 'sticky') && opt.e) {
         const p = canvas.getPointer(opt.e);
         const tbOpts: any = {
@@ -293,6 +327,26 @@ export default function CanvasPage({
       temp = null;
     });
 
+    // keep the floating ✏️/✕ bar glued to whichever canvas object is selected
+    const refreshActive = () => {
+      const obj = canvas.getActiveObject();
+      if (!obj) {
+        setActiveBar(null);
+        return;
+      }
+      const r = obj.getBoundingRect();
+      setActiveBar({
+        left: r.left + r.width,
+        top: r.top,
+        canEdit: obj.type === 'i-text' || obj.type === 'textbox'
+      });
+    };
+    canvas.on('selection:created', refreshActive);
+    canvas.on('selection:updated', refreshActive);
+    canvas.on('selection:cleared', () => setActiveBar(null));
+    canvas.on('object:moving', refreshActive);
+    canvas.on('object:modified', refreshActive);
+
     return () => {
       alive = false;
       try {
@@ -361,6 +415,17 @@ export default function CanvasPage({
     canvas.requestRenderAll();
   }, [tool, color, size, straight]);
 
+  // belt & braces: keep the current brush's colour/size in perfect sync with the toolbar picks,
+  // so picking a new ink colour always writes in that colour
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    const b = canvas?.freeDrawingBrush;
+    if (b && DRAW_TOOLS.includes(toolRef.current)) {
+      b.color = color;
+      b.width = size;
+    }
+  }, [color, size]);
+
   // delete key removes selection in select mode (active page only)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -389,6 +454,31 @@ export default function CanvasPage({
       onPointerDownCapture={onFocused}
     >
       <canvas ref={canvasEl} />
+      {/* action bar for the selected drawing object (text, shape, ink…) — visible in select
+          mode, and also while using the text tool so typed text always has a visible remove/edit */}
+      {activeBar && (tool === 'select' || tool === 'text' || tool === 'sticky') && (
+        <div
+          className="absolute z-50 flex items-center gap-1"
+          style={{ left: activeBar.left - 84, top: activeBar.top - 38, pointerEvents: 'auto' }}
+        >
+          {activeBar.canEdit && (
+            <button
+              onClick={editActive}
+              className="w-7 h-7 rounded-full bg-paper border border-ink/25 shadow-paper-sm flex items-center justify-center text-[12px] hover:bg-ink/10 transition"
+              title="Edit text (double-click also works)"
+            >
+              ✏️
+            </button>
+          )}
+          <button
+            onClick={deleteActive}
+            className="w-7 h-7 rounded-full bg-accent-red text-white shadow-paper-sm flex items-center justify-center text-[12px] hover:bg-accent-red/85 transition"
+            title="Delete (Del key also works)"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -50,17 +50,33 @@ function useLocalText(value: string | undefined, onCommit: (v: string) => void) 
 
 // ---------------- content blocks (each with top-level hooks) ----------------
 
+// the editable div grows/shrinks the block so text always stays inside the box
+function autosize(act: { updateBlock: (pageId: string, blockId: string, patch: Partial<Block>) => void }, page: Page, block: Block, el: HTMLElement) {
+  const cur = block.h ?? 64;
+  const need = el.scrollHeight + 6;
+  if (need > cur - 2 && need < PAGE_H) {
+    act.updateBlock(page.id, block.id, { h: Math.round(need) });
+  } else if (cur - need > 24 && cur > 48) {
+    act.updateBlock(page.id, block.id, { h: Math.max(48, Math.round(need)) });
+  }
+}
+
 function HeadingBlock({ block, page }: { block: Block; page: Page }) {
   const { act } = useApp();
   const t = useLocalText(block.text, (v) => act.updateBlock(page.id, block.id, { text: v }));
   return (
     <div
       ref={t.elRef}
+      data-edit-target
       className={`block-heading font-sans font-bold text-[28px] leading-tight text-ink ${t.editing ? 'cursor-text' : ''}`}
       contentEditable={t.editing}
       suppressContentEditableWarning
       onBlur={t.commit}
-      onInput={(e) => t.setVal((e.target as HTMLElement).innerText)}
+      onInput={(e) => {
+        const el = e.target as HTMLElement;
+        t.setVal(el.innerText);
+        autosize(act, page, block, el);
+      }}
       onClick={(e) => {
         e.stopPropagation();
         t.startEdit();
@@ -81,12 +97,17 @@ function SectionBlock({ block, page }: { block: Block; page: Page }) {
       </svg>
       <div
         ref={t.elRef}
+        data-edit-target
         className={`font-hand font-semibold text-[24px] leading-none tracking-wide ${t.editing ? 'cursor-text' : ''}`}
         style={{ color: block.color ?? '#c0392b' }}
         contentEditable={t.editing}
         suppressContentEditableWarning
         onBlur={t.commit}
-        onInput={(e) => t.setVal((e.target as HTMLElement).innerText)}
+        onInput={(e) => {
+          const el = e.target as HTMLElement;
+          t.setVal(el.innerText);
+          autosize(act, page, block, el);
+        }}
         onClick={(e) => {
           e.stopPropagation();
           t.startEdit();
@@ -107,11 +128,16 @@ function TextBlock({ block, page }: { block: Block; page: Page }) {
   return (
     <div
       ref={t.elRef}
+      data-edit-target
       className={`block-text text-[16px] leading-relaxed text-ink/90 whitespace-pre-wrap ${t.editing ? 'cursor-text' : ''}`}
       contentEditable={t.editing}
       suppressContentEditableWarning
       onBlur={t.commit}
-      onInput={(e) => t.setVal((e.target as HTMLElement).innerText)}
+      onInput={(e) => {
+        const el = e.target as HTMLElement;
+        t.setVal(el.innerText);
+        autosize(act, page, block, el);
+      }}
       onClick={(e) => {
         e.stopPropagation();
         t.startEdit();
@@ -128,6 +154,7 @@ function StickyBlock({ block, page }: { block: Block; page: Page }) {
   return (
     <div
       ref={t.elRef}
+      data-edit-target
       className={`h-full w-full rounded-sm p-2.5 font-hand text-[18px] leading-snug ${t.editing ? 'cursor-text' : ''}`}
       style={{
         background: block.stickColor ?? '#f3e9b8',
@@ -136,7 +163,11 @@ function StickyBlock({ block, page }: { block: Block; page: Page }) {
       contentEditable={t.editing}
       suppressContentEditableWarning
       onBlur={t.commit}
-      onInput={(e) => t.setVal((e.target as HTMLElement).innerText)}
+      onInput={(e) => {
+        const el = e.target as HTMLElement;
+        t.setVal(el.innerText);
+        autosize(act, page, block, el);
+      }}
       onClick={(e) => {
         e.stopPropagation();
         t.startEdit();
@@ -245,6 +276,7 @@ function DragLayer({
   editMode: boolean;
 }) {
   const { act } = useApp();
+  const rootRef = useRef<HTMLDivElement>(null);
   const start = useRef<{ x: number; y: number; bx: number; by: number; moved: boolean } | null>(null);
 
   const pagePoint = (e: React.PointerEvent | PointerEvent) => {
@@ -377,6 +409,7 @@ function DragLayer({
 
   return (
     <div
+      ref={rootRef}
       data-block={block.id}
       className="absolute group"
       style={{
@@ -394,8 +427,8 @@ function DragLayer({
       {selected && (
         <div className="pointer-events-none absolute inset-0 rounded-[3px] border-2 border-accent-blue/50" />
       )}
-      {/* drag-to-rotate handle: a stem above the block's top edge */}
-      {selected && (
+      {/* drag-to-rotate handle: a stem above the block's top edge (move mode only) */}
+      {selected && editMode && (
         <div className="pointer-events-none absolute left-1/2 -top-9 -translate-x-1/2 flex flex-col items-center">
           <div
             data-no-drag
@@ -409,8 +442,8 @@ function DragLayer({
           <div className="w-[2px] h-5 bg-accent-blue/60" />
         </div>
       )}
-      {/* Google Docs-style resize handles */}
-      {selected && (
+      {/* Google Docs-style resize handles (move mode only, so they never steal pen strokes) */}
+      {selected && editMode && (
         <>
           {handleBtn('nw', '-left-1.5 -top-1.5', 'nwse-resize', 'Resize')}
           {handleBtn('n', 'left-1/2 -top-1.5 -translate-x-1/2', 'ns-resize', 'Resize height')}
@@ -423,7 +456,19 @@ function DragLayer({
         </>
       )}
       {(selected || editMode) && (
-        <div className={`absolute -top-3 -right-2 flex gap-1 transition-opacity ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+        <div className={`absolute -top-10 -right-2 z-20 flex gap-1 transition-opacity ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <button
+            data-no-drag
+            onClick={(e) => {
+              e.stopPropagation();
+              // ask the block's editable text to start editing (same as clicking the text)
+              rootRef.current?.querySelector<HTMLElement>('[data-edit-target]')?.click();
+            }}
+            className="pointer-events-auto w-6 h-6 rounded-full bg-paper border border-ink/25 shadow-paper-sm flex items-center justify-center text-[11px] hover:bg-ink/10"
+            title="Edit text"
+          >
+            ✏️
+          </button>
           <button
             data-no-drag
             onClick={(e) => {

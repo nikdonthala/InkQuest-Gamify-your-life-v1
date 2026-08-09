@@ -73,10 +73,12 @@ export default function PageView({
         </div>
       )}
 
-      {/* blocks layer (above ink, below controls) */}
+      {/* blocks layer (above ink AND above the drawing canvas, so a selected block's
+          edit/delete/rotate buttons stay clickable even while a drawing tool is active;
+          when a tool is active the layer ignores pointer events and ink passes through) */}
       <div
         className="absolute inset-0"
-        style={{ zIndex: 20, pointerEvents: editMode ? 'auto' : 'none' }}
+        style={{ zIndex: 40, pointerEvents: editMode ? 'auto' : 'none' }}
         onPointerDown={(e) => {
           const t = e.target as HTMLElement;
           if (t === e.currentTarget || t.dataset.page === page.id) onFocused();
