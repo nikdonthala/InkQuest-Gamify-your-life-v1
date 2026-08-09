@@ -5,6 +5,8 @@ every habit you mark earns XP in real time — streaks, combos, achievements, a 
 leaderboard, and a companion pet that grows with you.
 
 > **v1.0** · InkQuest · [Created by nikdonthala](https://github.com/nikdonthala)
+>
+> **Live app:** <https://inkquest-v1.vercel.app> (v1) · old v0.2: <https://inkquest-chi.vercel.app>
 
 ---
 
@@ -40,6 +42,40 @@ npm run preview    # preview the build
 ```
 
 The app is a static Vite + React PWA — no backend required for core features.
+
+## ☁️ Google sign-in & cloud backup
+
+Sign in with your Google account and your notebook is automatically backed up to your own
+cloud copy — your data follows you across devices and is protected by row-level security
+(no one else can read or write your row).
+
+Setup is optional and takes ~2 minutes (see [.env.example](.env.example)):
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. Run the one-time SQL (creates the `snapshots` table + RLS policy) from `.env.example`.
+3. Enable the **Google** provider in Authentication → Providers and add your Google OAuth
+   client (from [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)).
+4. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Vercel (and `.env.local` for dev).
+
+Until then the app runs fully offline-first — everything stays on your device.
+
+## 💾 Saving & backup
+
+- **Autosave** — every change is saved to your device's IndexedDB moments after you make it.
+- **Save now** — the 💾 Save button in the notebook's top bar (or **Ctrl/Cmd + S**) writes
+  immediately and shows a ✓ confirmation. Saving also happens automatically when you
+  switch tabs, close, or reload the page.
+- **Backup / Restore** — on the shelf footer you can download your whole notebook as a
+  `.json` backup file and restore it later.
+
+## ✏️ Editing text
+
+- **Text blocks** (headings, text, sticky notes): click to edit, or use the ✏️ button on the
+  block's toolbar. Boxes auto-grow to fit what you type. The ⧉ / ⟳ / ✕ buttons are always
+  visible once a block is selected.
+- **Drawn text** (the text tool): double-click any text to edit it (in any tool), or select
+  it with the select tool and use the floating ✏️ / ✕ bar. The text tool also edits text you
+  click on instead of stacking new boxes.
 
 ## 🤖 AI assistant (Inky) & API keys
 

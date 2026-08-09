@@ -10,6 +10,7 @@
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
     "fabric": "^6.5.0",
     "framer-motion": "^11.3.24",
     "idb": "^8.0.0",

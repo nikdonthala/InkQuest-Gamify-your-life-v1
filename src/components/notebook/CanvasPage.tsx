@@ -220,11 +220,23 @@ export default function CanvasPage({
       saveState();
     });
 
-    canvas.on('mouse:dblclick', () => {
-      const obj = canvas.getActiveObject();
-      if (obj && (obj.type === 'i-text' || obj.type === 'textbox')) {
-        (obj as Textbox).enterEditing?.();
-      }
+    // double-click any text box to edit it — works in EVERY tool mode (not just select),
+    // and cramped boxes are widened so the text is actually readable/editable
+    canvas.on('mouse:dblclick', (opt) => {
+      if (!opt.e) return;
+      const p = canvas.getPointer(opt.e);
+      const hit = canvas
+        .getObjects()
+        .filter((o) => o.type === 'i-text' || o.type === 'textbox')
+        .find((o) => o.containsPoint(p));
+      if (!hit) return;
+      const tb = hit as Textbox;
+      if (tb.width !== undefined && tb.width < 60) tb.set({ width: 180 });
+      canvas.setActiveObject(tb);
+      const r = tb.getBoundingRect();
+      setActiveBar({ left: r.left + r.width, top: r.top, canEdit: true });
+      canvas.requestRenderAll();
+      tb.enterEditing?.();
     });
 
     // text / sticky tools — clicking an EXISTING text box with the text tool edits it,
@@ -238,9 +250,11 @@ export default function CanvasPage({
           .filter((o) => o.type === 'i-text' || o.type === 'textbox')
           .find((o) => o.containsPoint(p));
         if (hit) {
-          canvas.setActiveObject(hit);
+          const tb = hit as Textbox;
+          if (tb.width !== undefined && tb.width < 60) tb.set({ width: 180 });
+          canvas.setActiveObject(tb);
           canvas.requestRenderAll();
-          (hit as Textbox).enterEditing?.();
+          tb.enterEditing?.();
           return;
         }
       }

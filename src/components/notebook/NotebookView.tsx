@@ -122,17 +122,30 @@ export default function NotebookView() {
   const [tourOpen, setTourOpen] = useState(false);
   const [saveFlash, setSaveFlash] = useState(false);
   const saveTimerRef = useRef<number | null>(null);
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     void saveNow().then(() => {
       setSaveFlash(true);
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = window.setTimeout(() => setSaveFlash(false), 1800);
     });
-  };
+  }, [saveNow]);
   // clear the flash timer if the notebook unmounts (back to the shelf)
   useEffect(() => () => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
   }, []);
+
+  // Ctrl/Cmd + S saves immediately anywhere in the notebook
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleSave]);
 
   // ---- live XP burst: whenever XP rises, float a +N XP near the top bar ----
   const prevXp = useRef(state.snap.meta.xp);
@@ -548,6 +561,26 @@ export default function NotebookView() {
         canUndo={undoHistory.canUndo}
         canRedo={undoHistory.canRedo}
       />
+
+      {/* save toast — appears at the bottom when a manual save lands */}
+      <AnimatePresence>
+        {saveFlash && (
+          <motion.div
+            initial={{ opacity: 0, y: 18, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.97 }}
+            transition={{ type: 'spring', damping: 18, stiffness: 260 }}
+            className="fixed bottom-14 left-1/2 -translate-x-1/2 z-[70] pointer-events-none"
+          >
+            <div className="rounded-full bg-[#2d2a26] text-paper px-4 py-2 text-[12px] font-semibold shadow-lift flex items-center gap-2">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M1.5 6.5 L4.5 9.5 L10.5 2.5" stroke="#6fbf73" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Saved to this device
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ---------- modals ---------- */}
       <HabitsModal open={panel === 'habits'} onClose={() => setPanel(null)} />

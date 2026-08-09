@@ -1,13 +1,27 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useApp } from '../state/AppContext';
 import { COVERS } from '../types';
 import { InkQuestLogo } from './InkQuestLogo';
 import { PaperModal, Tip } from './ui';
 import { levelProgress } from '../lib/gamify';
+import { cloudEnabled } from '../lib/cloud';
+import type { Snapshot } from '../types';
+
+function GoogleG() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.66-.22-2.45H12v4.64h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.09 3.57-5.16 3.57-8.81Z" />
+      <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.94-2.91l-3.87-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.28v3.1A12 12 0 0 0 12 24Z" />
+      <path fill="#FBBC05" d="M5.27 14.28a7.2 7.2 0 0 1 0-4.56v-3.1H1.28a12 12 0 0 0 0 10.76l3.99-3.1Z" />
+      <path fill="#EA4335" d="M12 4.76c1.76 0 3.34.6 4.58 1.79l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.62l3.99 3.1C6.22 6.87 8.87 4.76 12 4.76Z" />
+    </svg>
+  );
+}
 
 export default function Shelf() {
-  const { state, act, levelInfo, overallStreak } = useApp();
+  const { state, act, levelInfo, overallStreak, cloudUser, cloudStatus } = useApp();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [cover, setCover] = useState('ink');
@@ -51,6 +65,48 @@ export default function Shelf() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* Google sign-in — backs up the notebook to the user's cloud account */}
+            {cloudUser ? (
+              <button
+                onClick={() => {
+                  if (confirm(`Sign out of the InkQuest cloud (${cloudUser.email})? Your notebook stays safe on this device.`)) act.signOutGoogle();
+                }}
+                className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 shadow-paper-sm transition ${dark ? 'bg-paper/10 hover:bg-paper/15' : 'bg-white/50 hover:bg-white/80'}`}
+                title="Signed in — your notebook is backed up to the cloud. Click to sign out."
+              >
+                {cloudUser.avatar ? (
+                  <img src={cloudUser.avatar} alt="" className="w-7 h-7 rounded-full" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-accent-blue text-white flex items-center justify-center text-[11px] font-bold">
+                    {cloudUser.name[0]?.toUpperCase()}
+                  </div>
+                )}
+                <span className="text-left leading-tight">
+                  <span className={`block text-[11px] font-semibold max-w-[110px] truncate ${dark ? 'text-paper' : 'text-ink'}`}>{cloudUser.name}</span>
+                  <span
+                    className={`block text-[9px] font-medium ${
+                      cloudStatus === 'synced' ? 'text-accent-green' : cloudStatus === 'syncing' ? 'text-accent-amber' : 'text-ink-faint'
+                    }`}
+                  >
+                    {cloudStatus === 'synced' ? '☁️ synced' : cloudStatus === 'syncing' ? '☁️ syncing…' : cloudStatus === 'error' ? '☁️ offline' : '☁️ local'}
+                  </span>
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={act.signInGoogle}
+                disabled={!cloudEnabled}
+                className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-paper-sm hover:shadow-lift transition active:scale-95 disabled:opacity-40 text-[12px] font-semibold text-ink"
+                title={
+                  cloudEnabled
+                    ? 'Sign in with Google — your notebook is then backed up to the cloud'
+                    : 'Cloud sync is not configured yet (see the README for the 2-minute setup)'
+                }
+              >
+                <GoogleG />
+                Sign in with Google
+              </button>
+            )}
             <div className={`rounded-xl px-3 py-2 text-center shadow-paper-sm ${dark ? 'bg-paper/10' : 'bg-white/50'}`}>
               <div className={`text-lg font-bold ${dark ? 'text-paper' : 'text-ink'}`}>LV {levelInfo.level}</div>
               <div className="text-[10px] uppercase tracking-wide text-ink-faint">level</div>
@@ -148,6 +204,57 @@ export default function Shelf() {
             ✍️ everything autosaves to this device · works offline · install as an app
           </div>
           <div className="mt-1.5 text-[10px] uppercase tracking-widest text-ink-faint/70 font-semibold">InkQuest v1.0 · gamify your life</div>
+          <div className="mt-3 flex items-center justify-center gap-3 flex-wrap">
+            <button
+              onClick={() => {
+                const blob = new Blob(
+                  [JSON.stringify({ app: 'InkQuest', version: '1.0.0', exportedAt: new Date().toISOString(), data: state.snap }, null, 2)],
+                  { type: 'application/json' }
+                );
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `inkquest-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+              }}
+              className={`text-[11px] underline underline-offset-2 transition ${dark ? 'text-paper/50 hover:text-accent-amber' : 'text-ink-faint/60 hover:text-accent-red'}`}
+              title="Download your whole notebook as a JSON backup file"
+            >
+              ⬇️ Backup (.json)
+            </button>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className={`text-[11px] underline underline-offset-2 transition ${dark ? 'text-paper/50 hover:text-accent-amber' : 'text-ink-faint/60 hover:text-accent-red'}`}
+              title="Restore a notebook from a JSON backup file"
+            >
+              ⬆️ Restore
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  try {
+                    const parsed = JSON.parse(String(reader.result));
+                    const snap: Snapshot = (parsed?.data ?? parsed) as Snapshot;
+                    if (!snap || !Array.isArray(snap.notebooks) || typeof snap.pages !== 'object') throw new Error('bad file');
+                    if (confirm('Replace your current notebook with this backup? (Make sure you exported it from this app.)')) {
+                      act.importSnapshot(snap);
+                    }
+                  } catch {
+                    alert('That file is not a valid InkQuest backup.');
+                  }
+                };
+                reader.readAsText(f);
+              }}
+            />
+          </div>
           <div className="mt-3 flex items-center justify-center gap-4 flex-wrap">
             <a
               href="https://github.com/nikdonthala"

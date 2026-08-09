@@ -22,6 +22,7 @@ import type {
 } from '../types';
 import { PAGE_H, PAGE_W, uid } from '../types';
 import { loadSnapshot, saveSnapshot } from '../lib/db';
+import { cloud, type CloudUser } from '../lib/cloud';
 import { seedSnapshot } from '../lib/seed';
 import * as g from '../lib/gamify';
 import { addDays, iso, monthKey, todayISO } from '../lib/dates';
@@ -769,6 +770,8 @@ interface AppApi {
   dispatch: React.Dispatch<Action>;
   undoHistory: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
   lastSaved: number | null;
+  cloudUser: CloudUser | null;
+  cloudStatus: 'off' | 'idle' | 'syncing' | 'synced' | 'error';
   habitsById: Map<string, Habit>;
   currentNotebook: Notebook | null;
   level: number;
@@ -805,6 +808,9 @@ interface AppApi {
     deleteNotebook: (id: string) => void;
     renameNotebook: (id: string, name: string) => void;
     setCover: (id: string, cover: string) => void;
+    signInGoogle: () => void;
+    signOutGoogle: () => void;
+    importSnapshot: (snap: Snapshot) => void;
   };
 }
 
@@ -862,6 +868,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const lastPushedSnapRef = useRef<Snapshot | null>(null);
   const [, bumpHist] = useReducer((v: number) => v + 1, 0);
   const [lastSaved, setLastSaved] = useState<number | null>(null);
+
+  // ---- optional cloud sync (Supabase Google sign-in) — fully optional, offline-first stays default ----
+  const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<'off' | 'idle' | 'syncing' | 'synced' | 'error'>(
+    cloud.enabled ? 'idle' : 'off'
+  );
+  // when the local snapshot last changed (epoch ms) and when we last pushed to the cloud
+  // (0 = never saved locally yet — so an existing cloud copy is always restored first)
+  const lastLocalWriteRef = useRef(0);
+  const lastCloudPushRef = useRef(0);
+  const lastMergedUserRef = useRef<string | null>(null);
 
   const trackedDispatch = useCallback((action: Action) => {
     if (TRANSIENT.has(action.type)) {
@@ -976,15 +993,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!state.loaded) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      void saveSnapshot(stateRef.current.snap).then(() => setLastSaved(Date.now()));
+      void saveSnapshot(stateRef.current.snap).then(() => {
+        lastLocalWriteRef.current = Date.now();
+        setLastSaved(Date.now());
+      });
     }, 700);
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
   }, [state.snap, state.loaded]);
 
+  // push the current snapshot to the signed-in user's cloud copy (throttled unless forced)
+  const pushCloud = useCallback(async (force = false) => {
+    if (!cloud.enabled) return;
+    const now = Date.now();
+    if (!force && now - lastCloudPushRef.current < 10_000) return;
+    lastCloudPushRef.current = now;
+    try {
+      const ok = await cloud.pushSnapshot(stateRef.current.snap);
+      setCloudStatus(ok ? 'synced' : 'idle');
+    } catch {
+      setCloudStatus('error');
+    }
+  }, []);
+
   // "Save now" — cancel any pending debounce and write the current snapshot immediately
-  const saveNow = useCallback(async () => {
+  const saveNow = useCallback(async (forcePush = false) => {
     if (saveTimer.current) {
       window.clearTimeout(saveTimer.current);
       saveTimer.current = null;
@@ -994,19 +1028,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* ignore persistence errors (private mode etc.) */
     }
+    lastLocalWriteRef.current = Date.now();
     setLastSaved(Date.now());
-  }, []);
+    void pushCloud(forcePush);
+  }, [pushCloud]);
 
   // flush a save the moment the tab is hidden / page is being left — so a fast
   // reload or a mobile background never loses the last tick of work
   useEffect(() => {
     const onHidden = () => {
-      if (document.visibilityState === 'hidden') void saveNow();
+      if (document.visibilityState === 'hidden') void saveNow(true);
     };
     // pagehide fires on reload/close and visibility may still be 'visible' there,
     // so it must save unconditionally (beforeunload also covers desktop reloads)
+    // (forcePush bypasses the throttle so the very last edits always reach the cloud)
     const onPageHide = () => {
-      void saveNow();
+      void saveNow(true);
     };
     document.addEventListener('visibilitychange', onHidden);
     window.addEventListener('pagehide', onPageHide);
@@ -1015,6 +1052,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('pagehide', onPageHide);
     };
   }, [saveNow]);
+
+  // Google sign-in → restore/push the user's cloud copy (newest wins)
+  useEffect(() => {
+    if (!cloud.enabled) return;
+    const unsub = cloud.onAuthChange(async (u) => {
+      if (!u) {
+        setCloudUser(null);
+        setCloudStatus('idle');
+        lastMergedUserRef.current = null;
+        return;
+      }
+      setCloudUser(u);
+      if (lastMergedUserRef.current === u.id) return; // already merged this session
+      setCloudStatus('syncing');
+      // wait for the initial IndexedDB load — otherwise we'd treat the empty/demo
+      // seed as "local data" and clobber the user's real cloud copy
+      while (!stateRef.current.loaded) {
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      try {
+        const remote = await cloud.pullSnapshot();
+        if (remote && remote.data) {
+          if (remote.updatedAt > lastLocalWriteRef.current) {
+            // cloud copy is newer than anything saved on this device — restore it
+            dispatch({ type: 'INIT', snap: remote.data as Snapshot });
+          } else {
+            void pushCloud(true); // local is newer — upload it
+          }
+        } else {
+          void pushCloud(true); // first time on cloud — upload local
+        }
+        lastMergedUserRef.current = u.id;
+        setCloudStatus('synced');
+      } catch {
+        setCloudStatus('error');
+      }
+    });
+    return unsub;
+  }, [pushCloud]);
 
   useEffect(() => {
     const onUnload = () => {
@@ -1102,10 +1178,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       saveNow,
       deleteNotebook: (id: string) => dispatch({ type: 'DELETE_NOTEBOOK', id }),
       renameNotebook: (id: string, name: string) => dispatch({ type: 'RENAME_NOTEBOOK', id, name }),
-      setCover: (id: string, cover: string) => dispatch({ type: 'SET_COVER', id, cover })
+      setCover: (id: string, cover: string) => dispatch({ type: 'SET_COVER', id, cover }),
+      signInGoogle: () => {
+        void cloud.signInWithGoogle();
+      },
+      signOutGoogle: () => {
+        void cloud.signOut();
+      },
+      importSnapshot: (snap: Snapshot) => {
+        dispatch({ type: 'INIT', snap });
+        lastLocalWriteRef.current = Date.now();
+        void pushCloud(true);
+      }
       };
     },
-    [trackedDispatch, saveNow]
+    [trackedDispatch, saveNow, pushCloud]
   );
 
   const api: AppApi = {
@@ -1117,7 +1204,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     act,
     undoHistory: { canUndo: pastRef.current.length > 0, canRedo: futureRef.current.length > 0, undo, redo },
     lastSaved,
-    saveNow
+    saveNow,
+    cloudUser,
+    cloudStatus
   };
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
