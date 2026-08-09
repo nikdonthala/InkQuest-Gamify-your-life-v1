@@ -4,7 +4,7 @@ A hand-drawn habit notebook that **levels you up**. Every page is paper you can 
 every habit you mark earns XP in real time — streaks, combos, achievements, a weekly
 leaderboard, and a companion pet that grows with you.
 
-> **v0.2** · InkQuest · [Created by nikdonthala](https://github.com/nikdonthala)
+> **v1.0** · InkQuest · [Created by nikdonthala](https://github.com/nikdonthala)
 
 ---
 
@@ -64,7 +64,7 @@ vercel --prod     # production
 **GitHub**:
 
 ```bash
-git init && git add . && git commit -m "InkQuest v0.2.0"
+git init && git add . && git commit -m "InkQuest v1.0.0"
 gh repo create inkquest --public --source=. --push
 ```
 
@@ -97,5 +97,5 @@ MIT — free to use, fork and build on.
 ---
 
 <div align="center">
-  <sub>InkQuest v0.2 · gamify your life · <a href="https://github.com/nikdonthala">Created by nikdonthala</a></sub>
+  <sub>InkQuest v1.0 · gamify your life · <a href="https://github.com/nikdonthala">Created by nikdonthala</a></sub>
 </div>

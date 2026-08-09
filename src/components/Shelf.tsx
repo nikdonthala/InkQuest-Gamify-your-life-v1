@@ -147,7 +147,7 @@ export default function Shelf() {
           <div className="mt-3 text-[11px] text-ink-faint/80">
             ✍️ everything autosaves to this device · works offline · install as an app
           </div>
-          <div className="mt-1.5 text-[10px] uppercase tracking-widest text-ink-faint/70 font-semibold">InkQuest v0.2 · gamify your life</div>
+          <div className="mt-1.5 text-[10px] uppercase tracking-widest text-ink-faint/70 font-semibold">InkQuest v1.0 · gamify your life</div>
           <div className="mt-3 flex items-center justify-center gap-4 flex-wrap">
             <a
               href="https://github.com/nikdonthala"
