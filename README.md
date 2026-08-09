@@ -65,7 +65,7 @@ vercel --prod     # production
 
 ```bash
 git init && git add . && git commit -m "InkQuest v1.0.0"
-gh repo create inkquest --public --source=. --push
+gh repo create InkQuest-Gamify-your-life-v1 --public --source=. --push
 ```
 
 ## 🗂️ Project structure
