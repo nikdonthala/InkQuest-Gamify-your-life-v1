@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+/* base font a touch larger so everything reads clearly */
+html {
+  font-size: 17px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Google Sans', 'Product Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #2c2a26;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* everything is Google Sans — "handwritten" accents keep the notebook feel via weight + rotation */
+.font-hand {
+  font-family: 'Google Sans', 'Product Sans', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- paper styles ---------- */
+.paper-grid {
+  background-color: #f6f1e5;
+  background-image: linear-gradient(#00000012 1px, transparent 1px), linear-gradient(90deg, #00000012 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.paper-dot {
+  background-color: #f6f1e5;
+  background-image: radial-gradient(#0000001a 1.2px, transparent 1.3px);
+  background-size: 18px 18px;
+}
+.paper-ruled {
+  background-color: #f8f4ea;
+  background-image: repeating-linear-gradient(transparent 0 25px, #00000014 25px 26px);
+}
+.paper-blank {
+  background-color: #f8f4ea;
+}
+.paper-dark {
+  background-color: #26292e;
+  background-image: linear-gradient(#ffffff0d 1px, transparent 1px), linear-gradient(90deg, #ffffff0d 1px, transparent 1px);
+  background-size: 22px 22px;
+  color: #e8e3d5;
+}
+.paper-craft {
+  background-color: #dcc9a6;
+  background-image: linear-gradient(#0000000f 1px, transparent 1px), linear-gradient(90deg, #0000000f 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.paper-vintage {
+  background-color: #efe0bd;
+  background-image: linear-gradient(#00000010 1px, transparent 1px), linear-gradient(90deg, #00000010 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.paper-dark .block-text,
+.paper-dark .block-heading {
+  color: #e8e3d5;
+}
+.paper-craft .block-text,
+.paper-vintage .block-text {
+  color: #4a3f2f;
+}
+
+/* paper grain overlay */
+.grain {
+  position: relative;
+}
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: multiply;
+}
+
+/* ---------- scrollbars ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(44, 42, 38, 0.28) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(44, 42, 38, 0.25);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- selection ---------- */
+::selection {
+  background: rgba(192, 57, 43, 0.18);
+}
+
+input,
+textarea,
+[contenteditable] {
+  outline: none;
+}
+
+/* ---------- helpers ---------- */
+.no-drag {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+.draggable {
+  cursor: grab;
+}
+.draggable:active {
+  cursor: grabbing;
+}
+.hand-tilt {
+  transform: rotate(-1.5deg);
+}
+
+/* ink text feel */
+.ink-soft {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.canvas-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+}
+
+.cell-btn {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input[type='range'] {
+  accent-color: #c0392b;
+}
